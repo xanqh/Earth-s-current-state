@@ -20,18 +20,19 @@ const dbgResetTime = document.getElementById("dbg-reset-time");
 const dbgComet = document.getElementById("dbg-comet");
 const dbgParty = document.getElementById("dbg-party");
 const dbgReadout = document.getElementById("dbg-readout");
+const TOKYO_UTC_OFFSET = 9;
 
 const TEXT = {
   ja: {
     title: "地球のいま",
     subtitle: "世界を流れる昼と夜を、表情で見る。",
-    status: (dayCount, nightCount, utc) => `昼 ${dayCount} / 夜 ${nightCount} | UTC ${utc}`,
+    status: (dayCount, nightCount, tokyoTime) => `昼 ${dayCount} / 夜 ${nightCount} | JST ${tokyoTime}`,
     dragHint: "クリックで笑顔、ドラッグで移動。",
   },
   en: {
     title: "Earth’s current state",
     subtitle: "Watch day and night flowing across the world through expressions.",
-    status: (dayCount, nightCount, utc) => `Day ${dayCount} / Night ${nightCount} | UTC ${utc}`,
+    status: (dayCount, nightCount, tokyoTime) => `Day ${dayCount} / Night ${nightCount} | JST ${tokyoTime}`,
     dragHint: "Click to smile, drag to move.",
   },
 };
@@ -89,7 +90,7 @@ const state = {
   showLabels: true,
   partyMode: false,
   timeScale: 12,
-  manualUtcOffsetHours: 0,
+  manualTokyoOffsetHours: 0,
   timeBasePerf: performance.now(),
   timeBaseEpochMs: Date.now(),
 };
@@ -125,12 +126,12 @@ function normalizeLon(lon) {
 function getSimDate() {
   const nowPerf = performance.now();
   const elapsed = (nowPerf - state.timeBasePerf) * state.timeScale;
-  const offset = state.manualUtcOffsetHours * 3600000;
+  const offset = (TOKYO_UTC_OFFSET + state.manualTokyoOffsetHours) * 3600000;
   return new Date(state.timeBaseEpochMs + elapsed + offset);
 }
 
 function setTimeScale(nextScale) {
-  const simNow = getSimDate().getTime() - state.manualUtcOffsetHours * 3600000;
+  const simNow = getSimDate().getTime() - (TOKYO_UTC_OFFSET + state.manualTokyoOffsetHours) * 3600000;
   state.timeBaseEpochMs = simNow;
   state.timeBasePerf = performance.now();
   state.timeScale = nextScale;
@@ -158,16 +159,14 @@ function solarCosZenith(lat, lon, sunLat, sunLon) {
   return Math.sin(latR) * Math.sin(decR) + Math.cos(latR) * Math.cos(decR) * Math.cos(hourAngle);
 }
 
-function lonToX(lon, w) {
-  const left = 34;
-  const right = w - 34;
-  return left + ((lon + 180) / 360) * (right - left);
+function lonToX(lon) {
+  const mapRect = getMapRect();
+  return mapRect.left + ((lon + 180) / 360) * mapRect.width;
 }
 
-function latToY(lat, h) {
-  const top = 70;
-  const bottom = h - 112;
-  return top + ((90 - lat) / 180) * (bottom - top);
+function latToY(lat) {
+  const mapRect = getMapRect();
+  return mapRect.top + ((90 - lat) / 180) * mapRect.height;
 }
 
 function getMapRect() {
@@ -322,8 +321,8 @@ function updateCreatures(tick) {
   const marginYBottom = h - 120;
 
   for (const c of creatures) {
-    c.homeX = lonToX(c.lon, w);
-    c.homeY = latToY(c.lat, h);
+    c.homeX = lonToX(c.lon);
+    c.homeY = latToY(c.lat);
 
     const cosZenith = solarCosZenith(c.lat, c.lon, state.sunLat, state.sunLon);
     const dayFactor = clamp((cosZenith + 0.2) / 1.2, 0, 1);
@@ -386,8 +385,8 @@ function drawMapLayer() {
           for (let i = 0; i < ring.length; i += stride) {
             const point = ring[i];
             if (!Array.isArray(point) || point.length < 2) continue;
-            const x = lonToX(point[0], canvas.clientWidth);
-            const y = latToY(point[1], canvas.clientHeight);
+            const x = lonToX(point[0]);
+            const y = latToY(point[1]);
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
           }
@@ -438,8 +437,8 @@ function drawStars(tick) {
   for (const s of state.stars) {
     const cosZ = solarCosZenith(s.lat, s.lon, state.sunLat, state.sunLon);
     if (cosZ > -0.02) continue;
-    const x = lonToX(s.lon, w);
-    const y = latToY(s.lat, h);
+    const x = lonToX(s.lon);
+    const y = latToY(s.lat);
     if (x < mapRect.left || x > mapRect.right || y < mapRect.top || y > mapRect.bottom) continue;
     const a = 0.42 + 0.45 * (0.5 + 0.5 * Math.sin(tick * 2.4 + s.twinkle));
     ctx.fillStyle = `rgba(255, 255, 255, ${a.toFixed(3)})`;
@@ -499,8 +498,8 @@ function drawBackground(tick) {
   ctx.lineWidth = 1;
   ctx.strokeRect(mapRect.left, mapRect.top, mapRect.width, mapRect.height);
 
-  const sunX = lonToX(state.sunLon, w);
-  const sunY = latToY(state.sunLat, h);
+  const sunX = lonToX(state.sunLon);
+  const sunY = latToY(state.sunLat);
   const g = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 70);
   g.addColorStop(0, "rgba(255, 240, 128, 0.95)");
   g.addColorStop(1, "rgba(255, 240, 128, 0)");
@@ -577,8 +576,8 @@ function drawCreature(c) {
 function drawHeaderText(simDate) {
   const dayCount = creatures.filter((c) => c.isDay).length;
   const nightCount = creatures.length - dayCount;
-  const utc = `${String(simDate.getUTCHours()).padStart(2, "0")}:${String(simDate.getUTCMinutes()).padStart(2, "0")}:${String(simDate.getUTCSeconds()).padStart(2, "0")}`;
-  statusEl.textContent = `${t("status", dayCount, nightCount, utc)} | ${t("dragHint")}`;
+  const tokyo = `${String(simDate.getUTCHours()).padStart(2, "0")}:${String(simDate.getUTCMinutes()).padStart(2, "0")}:${String(simDate.getUTCSeconds()).padStart(2, "0")}`;
+  statusEl.textContent = `${t("status", dayCount, nightCount, tokyo)} | ${t("dragHint")}`;
 }
 
 function updateDebugReadout(simDate) {
@@ -586,9 +585,9 @@ function updateDebugReadout(simDate) {
   const txt = [
     `sun lat ${state.sunLat.toFixed(2)}`,
     `sun lon ${state.sunLon.toFixed(2)}`,
-    `sim ${simDate.toISOString().slice(0, 19)}Z`,
+    `sim_jst ${simDate.toISOString().slice(11, 19)}`,
     `scale x${state.timeScale}`,
-    `offset ${state.manualUtcOffsetHours >= 0 ? "+" : ""}${state.manualUtcOffsetHours}h`,
+    `tokyo_offset ${state.manualTokyoOffsetHours >= 0 ? "+" : ""}${state.manualTokyoOffsetHours}h`,
     `party ${state.partyMode ? "on" : "off"}`,
   ].join("\n");
   dbgReadout.textContent = txt;
@@ -651,8 +650,8 @@ function fitAndRecenter() {
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
   for (const c of creatures) {
-    const x = lonToX(c.lon, w);
-    const y = latToY(c.lat, h);
+    const x = lonToX(c.lon);
+    const y = latToY(c.lat);
     c.x = x;
     c.y = y;
     c.homeX = x;
@@ -677,8 +676,8 @@ function bindDebugControls() {
   });
 
   dbgUtcOffset.addEventListener("input", (e) => {
-    state.manualUtcOffsetHours = Number(e.target.value);
-    const v = state.manualUtcOffsetHours;
+    state.manualTokyoOffsetHours = Number(e.target.value);
+    const v = state.manualTokyoOffsetHours;
     dbgUtcOffsetValue.textContent = `${v >= 0 ? "+" : ""}${v}h`;
   });
 
@@ -706,7 +705,7 @@ function bindDebugControls() {
 
   if (dbgResetTime) {
     dbgResetTime.addEventListener("click", () => {
-      state.manualUtcOffsetHours = 0;
+      state.manualTokyoOffsetHours = 0;
       state.timeBaseEpochMs = Date.now();
       state.timeBasePerf = performance.now();
       if (dbgUtcOffset) dbgUtcOffset.value = "0";
@@ -736,7 +735,7 @@ function bindDebugControls() {
   }
   if (dbgUtcOffset) {
     const initialOffset = Number(dbgUtcOffset.value);
-    state.manualUtcOffsetHours = initialOffset;
+    state.manualTokyoOffsetHours = initialOffset;
     dbgUtcOffsetValue.textContent = `${initialOffset >= 0 ? "+" : ""}${initialOffset}h`;
   }
 }
