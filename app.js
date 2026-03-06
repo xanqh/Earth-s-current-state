@@ -126,15 +126,25 @@ function normalizeLon(lon) {
 function getSimDate() {
   const nowPerf = performance.now();
   const elapsed = (nowPerf - state.timeBasePerf) * state.timeScale;
-  const offset = (TOKYO_UTC_OFFSET + state.manualTokyoOffsetHours) * 3600000;
+  const offset = state.manualTokyoOffsetHours * 3600000;
   return new Date(state.timeBaseEpochMs + elapsed + offset);
 }
 
 function setTimeScale(nextScale) {
-  const simNow = getSimDate().getTime() - (TOKYO_UTC_OFFSET + state.manualTokyoOffsetHours) * 3600000;
+  const simNow = getSimDate().getTime() - state.manualTokyoOffsetHours * 3600000;
   state.timeBaseEpochMs = simNow;
   state.timeBasePerf = performance.now();
   state.timeScale = nextScale;
+}
+
+function formatTokyoTime(date) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
 }
 
 function dayOfYearUtc(date) {
@@ -241,6 +251,17 @@ function drawParticles() {
   }
 }
 
+function getUtcHour(date) {
+  return date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+}
+
+function getSolarLocalHour(utcHour, lon) {
+  let h = utcHour + lon / 15;
+  while (h < 0) h += 24;
+  while (h >= 24) h -= 24;
+  return h;
+}
+
 function updateComet() {
   if (state.comet.active) {
     state.comet.x += state.comet.vx;
@@ -313,12 +334,13 @@ function updateSun() {
   return simDate;
 }
 
-function updateCreatures(tick) {
+function updateCreatures(tick, simDate) {
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
   const marginX = 68;
   const marginYTop = 74;
   const marginYBottom = h - 120;
+  const utcHour = getUtcHour(simDate);
 
   for (const c of creatures) {
     c.homeX = lonToX(c.lon);
@@ -326,7 +348,10 @@ function updateCreatures(tick) {
 
     const cosZenith = solarCosZenith(c.lat, c.lon, state.sunLat, state.sunLon);
     const dayFactor = clamp((cosZenith + 0.2) / 1.2, 0, 1);
-    const nextDay = cosZenith > 0;
+    const localHour = getSolarLocalHour(utcHour, c.lon);
+    const sureNight = localHour < 5.5 || localHour >= 19.5;
+    const sureDay = localHour >= 7 && localHour < 17;
+    const nextDay = sureNight ? false : sureDay ? true : cosZenith > 0;
 
     if (nextDay !== c.isDay) {
       c.smileUntil = performance.now() + 500;
@@ -421,7 +446,7 @@ function drawNightMask() {
       const lat = 90 - ((y - mapRect.top) / mapRect.height) * 180;
       const cosZ = solarCosZenith(lat, lon, state.sunLat, state.sunLon);
       if (cosZ <= 0) {
-        const a = clamp(0.13 + Math.abs(cosZ) * 0.32, 0.13, 0.4);
+        const a = clamp(0.18 + Math.abs(cosZ) * 0.36, 0.18, 0.5);
         ctx.fillStyle = `rgba(24, 33, 52, ${a.toFixed(3)})`;
         ctx.fillRect(x, y, cell, cell);
       }
@@ -576,7 +601,7 @@ function drawCreature(c) {
 function drawHeaderText(simDate) {
   const dayCount = creatures.filter((c) => c.isDay).length;
   const nightCount = creatures.length - dayCount;
-  const tokyo = `${String(simDate.getUTCHours()).padStart(2, "0")}:${String(simDate.getUTCMinutes()).padStart(2, "0")}:${String(simDate.getUTCSeconds()).padStart(2, "0")}`;
+  const tokyo = formatTokyoTime(simDate);
   statusEl.textContent = `${t("status", dayCount, nightCount, tokyo)} | ${t("dragHint")}`;
 }
 
@@ -585,7 +610,7 @@ function updateDebugReadout(simDate) {
   const txt = [
     `sun lat ${state.sunLat.toFixed(2)}`,
     `sun lon ${state.sunLon.toFixed(2)}`,
-    `sim_jst ${simDate.toISOString().slice(11, 19)}`,
+    `sim_jst ${formatTokyoTime(simDate)}`,
     `scale x${state.timeScale}`,
     `tokyo_offset ${state.manualTokyoOffsetHours >= 0 ? "+" : ""}${state.manualTokyoOffsetHours}h`,
     `party ${state.partyMode ? "on" : "off"}`,
@@ -743,7 +768,7 @@ function bindDebugControls() {
 function renderFrame() {
   const tick = performance.now() / 1000;
   const simDate = updateSun();
-  updateCreatures(tick);
+  updateCreatures(tick, simDate);
   drawBackground(tick);
   for (const c of creatures) drawCreature(c);
   drawParticles();
