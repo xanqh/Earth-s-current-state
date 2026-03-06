@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar Creatures</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="hud">
+        <div class="title-row">
+          <h1 id="title">Solar Creatures</h1>
+          <div class="controls">
+            <button id="debug-toggle" type="button" aria-label="debug toggle">DEBUG</button>
+            <button id="lang-toggle" type="button" aria-label="language toggle">EN</button>
+          </div>
+        </div>
+        <p id="subtitle" class="sub">世界を流れる昼と夜を、表情で見る。</p>
+        <p id="status">読み込み中...</p>
+      </header>
+      <aside id="debug-panel" class="debug-panel hidden" aria-live="polite">
+        <div class="debug-title">DEV PANEL</div>
+        <label>
+          <span>time scale</span>
+          <input id="dbg-time-scale" type="range" min="1" max="16000" step="1" value="1" />
+          <b id="dbg-time-scale-value">x1</b>
+        </label>
+        <label>
+          <span>utc offset</span>
+          <input id="dbg-utc-offset" type="range" min="-12" max="12" step="1" value="0" />
+          <b id="dbg-utc-offset-value">+0h</b>
+        </label>
+        <label class="check"><input id="dbg-show-map" type="checkbox" checked /> map</label>
+        <label class="check"><input id="dbg-show-grid" type="checkbox" checked /> grid</label>
+        <label class="check"><input id="dbg-show-night" type="checkbox" checked /> night mask</label>
+        <label class="check"><input id="dbg-show-labels" type="checkbox" checked /> labels</label>
+        <button id="dbg-wave" type="button">smile wave</button>
+        <button id="dbg-reset-time" type="button">reset time</button>
+        <button id="dbg-comet" type="button">spawn comet</button>
+        <button id="dbg-party" type="button">party off</button>
+        <p id="dbg-readout">-</p>
+      </aside>
+      <canvas id="pond" width="1200" height="700" aria-label="solar creatures"></canvas>
+    </main>
+    <script src="./world_geo_data.js"></script>
+    <script src="./app.js" defer></script>
+  </body>
+</html>
