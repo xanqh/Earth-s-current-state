@@ -30,7 +30,7 @@ const TEXT = {
   },
   en: {
     title: "Earth’s current state",
-    subtitle: "Creatures reacting to the moving day-night line",
+    subtitle: "Watch day and night flowing across the world through expressions.",
     status: (dayCount, nightCount, utc) => `Day ${dayCount} / Night ${nightCount} | UTC ${utc}`,
     dragHint: "Click to smile, drag to move.",
   },
